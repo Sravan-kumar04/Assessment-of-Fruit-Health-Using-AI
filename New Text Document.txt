@@ -1,0 +1,138 @@
+from google.colab import drive
+drive.mount('/content/drive')
+!unzip /content/drive/MyDrive/ffrc.zip -d '/content/drive/My Drive/PS1'
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow import keras
+from keras.models import Sequential
+from keras.layers import Convolution2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+from keras.utils.np_utils import to_categorical
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.preprocessing import image as image_utils
+from tensorflow.keras.applications.imagenet_utils import preprocess_input
+
+from distutils.dir_util import copy_tree
+
+train_folder = '/content/drive/MyDrive/PS1/dataset/train'
+test_folder = '/content/drive/MyDrive/PS1/dataset/test'
+
+# Make a new train folder with fresh fruits
+toDirectory = '/content/drive/MyDrive/PS1/train/freshfruits';
+
+fromDirectory = train_folder + '/freshapples';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = train_folder + '/freshbanana';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = train_folder + '/freshoranges';
+copy_tree(fromDirectory, toDirectory);
+
+# Make a new train folder with rotten fruits
+toDirectory = '/content/drive/MyDrive/PS1/train/rottenfruits';
+
+fromDirectory = train_folder + '/rottenapples';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = train_folder + '/rottenbanana';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = train_folder + '/rottenoranges';
+copy_tree(fromDirectory, toDirectory);
+
+# Make a new validation folder with fresh fruits
+toDirectory = '/content/drive/MyDrive/PS1/validation/freshfruits';
+
+fromDirectory = test_folder + '/freshapples';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = test_folder + '/freshbanana';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = test_folder + '/freshoranges';
+copy_tree(fromDirectory, toDirectory);
+
+# Make a new validation folder with rotten fruits
+toDirectory = '/content/drive/MyDrive/PS1/validation/rottenfruits';
+
+fromDirectory = test_folder + '/rottenapples';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = test_folder + '/rottenbanana';
+copy_tree(fromDirectory, toDirectory);
+fromDirectory = test_folder + '/rottenoranges';
+copy_tree(fromDirectory, toDirectory);
+
+def show_image(image_path):
+    image = mpimg.imread(image_path)
+    print(image.shape)
+    plt.imshow(image)
+
+base_model = keras.applications.VGG16(
+    weights='imagenet',
+    input_shape=(224, 224, 3),
+    include_top=False);
+
+base_model.trainable = False
+
+# Create inputs with correct shape
+inputs =  keras.Input(shape=(224, 224, 3))
+
+x = base_model(inputs, training=False)
+
+# Add pooling layer
+x = keras.layers.GlobalAveragePooling2D()(x)
+
+# Add final dense layer
+outputs = keras.layers.Dense(1,activation = 'sigmoid')(x)
+
+# Combine inputs and outputs to create model
+model = keras.Model(inputs, outputs)
+model.summary()
+model.compile(loss=keras.losses.BinaryCrossentropy(from_logits=False), metrics=[keras.metrics.BinaryAccuracy()])
+datagen_train = ImageDataGenerator(
+    samplewise_center=True,  # set each sample mean to 0
+    rotation_range=10,  # randomly rotate images in the range (degrees, 0 to 180)
+    zoom_range=0.1,  # Randomly zoom image
+    width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
+    height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
+    horizontal_flip=True,  # randomly flip images horizontaly
+    vertical_flip=True, # randomly flip images verticaly
+)
+
+datagen_valid = ImageDataGenerator(samplewise_center=True)
+# load and iterate training dataset
+train_it = datagen_train.flow_from_directory(
+    '/content/drive/MyDrive/PS1/train',
+    target_size=(224, 224),
+    color_mode="rgb",
+    class_mode="binary"
+)
+
+# load and iterate validation dataset
+valid_it = datagen_valid.flow_from_directory(
+    '/content/drive/MyDrive/PS1/validation',
+    target_size=(224, 224),
+    color_mode="rgb",
+    class_mode="binary"
+)
+
+model.fit(train_it,
+          validation_data = valid_it,
+          steps_per_epoch = train_it.samples/train_it.batch_size, # 340
+          validation_steps = valid_it.samples/valid_it.batch_size, # 340
+          epochs = 3)
+
+model.save('model.h5')
+
+model.evaluate(valid_it, steps=valid_it.samples/valid_it.batch_size)
+
+def make_predictions(image_path):
+    show_image(image_path)
+    image = image_utils.load_img(image_path, target_size=(224, 224))
+    image = image_utils.img_to_array(image)
+    image = image.reshape(1,224,224,3)
+    image = preprocess_input(image)
+    preds = model.predict(image)
+    return preds
+
+make_predictions('/content/drive/MyDrive/PS1/train/freshfruits/Screen Shot 2018-06-08 at 4.59.36 PM.png')
